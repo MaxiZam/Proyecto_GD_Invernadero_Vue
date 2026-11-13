@@ -135,7 +135,6 @@ const limpiarFiltro = () => {
   cargar()
 }
 
-// CSV con ';' y coma decimal, para que Excel en configuración regional es-AR lo abra bien
 const exportarCsv = () => {
   const cab = ['Fecha', 'Temp media (C)', 'Hum suelo media (%)', 'Hum aire media (%)', 'Luminosidad media (lux)',
     'Uso caloventor (%)', 'Uso humidificador (%)', 'Uso ventanales (%)', 'Uso persianas (%)', 'Uso bomba (%)']

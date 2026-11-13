@@ -8,7 +8,7 @@ type CampoReal = 'caloventorActivo' | 'humidificadorActivo' | 'ventanalesAbierto
 interface Actuador { id: string; nombre: string; real: CampoReal; on: string; off: string; etiquetaManual: string }
 interface Fila extends Actuador { cmd: Cmd; enviando: boolean }
 
-// estadoManual=true => encendido / abierto / enrolladas (igual que en el simulador)
+// estadoManual=true => encendido / abierto / enrolladas
 const ACTUADORES: Actuador[] = [
   { id: 'caloventor', nombre: 'Caloventor', real: 'caloventorActivo', on: 'ON', off: 'OFF', etiquetaManual: 'Encendido' },
   { id: 'humidificador', nombre: 'Humidificador', real: 'humidificadorActivo', on: 'ON', off: 'OFF', etiquetaManual: 'Encendido' },
@@ -47,7 +47,7 @@ const enviar = async (fila: Fila) => {
     error.value = ''
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
-    await recargar()   // vuelve al último estado conocido por el backend
+    await recargar()
   } finally {
     fila.enviando = false
   }

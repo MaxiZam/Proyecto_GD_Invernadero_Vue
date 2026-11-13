@@ -22,11 +22,9 @@ const INICIAL: Telemetria = {
   esDeDia: true
 }
 const MAX_ALERTAS = 100
-const MAX_MUESTRAS = 200          // ~10 min con una muestra cada 3 s
+const MAX_MUESTRAS = 200
 const SIN_DATOS_MS = 10_000
 const WS_URL = import.meta.env.VITE_WS_URL ?? 'http://localhost:8080/ws-invernadero'
-
-// Estado compartido (una sola conexión para toda la aplicación)
 const telemetria = reactive<Telemetria>({ ...INICIAL })
 const alertas = ref<Alerta[]>([])
 const muestras = ref<MuestraViva[]>([])

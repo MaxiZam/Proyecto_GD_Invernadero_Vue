@@ -29,7 +29,7 @@ onMounted(async () => {
   }
 })
 
-// --- Actuadores ---------------------------------------------------------------------------
+// --- Actuadores ---
 const actuadores = computed(() => [
   { nombre: 'Caloventor', activo: telemetria.caloventorActivo, on: 'ON', off: 'OFF' },
   { nombre: 'Humidificador', activo: telemetria.humidificadorActivo, on: 'ON', off: 'OFF' },
@@ -38,7 +38,7 @@ const actuadores = computed(() => [
   { nombre: 'Bomba de agua', activo: telemetria.bombaActiva, on: 'ACTIVA', off: 'INACTIVA' }
 ])
 
-// --- Resumen de la ventana en vivo --------------------------------------------------------
+// --- Resumen de la ventana en vivo ---
 const resumen = (f: (m: MuestraViva) => number) => {
   const v = muestras.value.map(f)
   const n = v.length
@@ -57,7 +57,7 @@ const filasResumen = computed(() => [
   { nombre: 'Luminosidad', unidad: 'lux', dec: 0, r: resumen(m => m.luminosidad) }
 ])
 
-// --- Gráficas en vivo ---------------------------------------------------------------------
+// --- Gráficas ---
 const etiquetas = computed(() => muestras.value.map(m => new Date(m.t).toLocaleTimeString('es-AR')))
 
 const dataClima = computed<ChartData<'line'>>(() => ({
@@ -165,7 +165,7 @@ const opcionesLuz: ChartOptions<'line'> = {
       </div>
     </div>
 
-    <!-- Resumen de la ventana + actuadores -->
+    <!-- Resumen de la ventana y actuadores -->
     <div class="row">
       <div class="col-lg-7 mb-3">
         <div class="card card-outline card-success shadow-sm h-100">

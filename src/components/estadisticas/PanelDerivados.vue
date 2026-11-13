@@ -53,11 +53,10 @@ const cargar = async () => {
 }
 onMounted(cargar)
 
-// --- Utilidades ---------------------------------------------------------------------------
+// --- Utilidades ---
 const etiquetaHora = (f: string) =>
   new Date(f).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 
-// 'YYYY-MM-DD' se interpreta como UTC y mostraría el día anterior en Argentina: se fuerza hora local
 const etiquetaDia = (f: string) =>
   new Date(f + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
 
@@ -75,7 +74,7 @@ const pearson = (xs: number[], ys: number[]): number | null => {
   return d === 0 ? null : sxy / d
 }
 
-// --- KPIs ---------------------------------------------------------------------------------
+// --- KPIs ---
 const kpis = computed<Kpi[]>(() => {
   const e = estadisticas.value
   if (!e) return []
@@ -95,7 +94,7 @@ const kpis = computed<Kpi[]>(() => {
   ]
 })
 
-// --- 1. Tendencia (serie promediada por el backend) ---------------------------------------
+// --- 1. Tendencia ---
 const dataTendencia = computed<ChartData<'line'>>(() => ({
   labels: serie.value.map(p => etiquetaHora(p.fechaHora)),
   datasets: [
@@ -123,7 +122,7 @@ const opcionesTendencia: ChartOptions<'line'> = {
   }
 }
 
-// --- 2. Banda mín–máx diaria de temperatura -----------------------------------------------
+// --- 2. Banda mín–máx diaria de temperatura ---
 const dataBanda = computed<ChartData<'line'>>(() => ({
   labels: diarias.value.map(d => etiquetaDia(d.fecha)),
   datasets: [
@@ -145,7 +144,7 @@ const opcionesBanda: ChartOptions<'line'> = {
   scales: { y: { title: { display: true, text: 'Temperatura (°C)' } } }
 }
 
-// --- 3. % de tiempo dentro / fuera de rango -----------------------------------------------
+// --- 3. Porcentaje de tiempo dentro / fuera de rango ---
 const enRango = computed(() => {
   const e = estadisticas.value
   return e ? [e.enRangoTemperatura, e.enRangoHumedadSuelo, e.enRangoHumedadAire] : [0, 0, 0]
@@ -170,7 +169,7 @@ const opcionesRango: ChartOptions<'bar'> = {
   }
 }
 
-// --- 4. Pizza: reparto del consumo energético ---------------------------------------------
+// --- 4. Pizza: reparto del consumo energético ---
 const energiaTotal = computed(() => estadisticas.value?.energiaEstimadaKwh ?? 0)
 
 const dataEnergia = computed<ChartData<'pie'>>(() => {
@@ -202,7 +201,7 @@ const opcionesEnergia: ChartOptions<'pie'> = {
   }
 }
 
-// --- 5. Radar: perfil de uso de actuadores ------------------------------------------------
+// --- 5. Radar: perfil de uso de actuadores ---
 const dataRadar = computed<ChartData<'radar'>>(() => {
   const e = estadisticas.value
   return {
@@ -226,7 +225,7 @@ const opcionesRadar: ChartOptions<'radar'> = {
   scales: { r: { min: 0, max: 100, ticks: { stepSize: 25 } } }
 }
 
-// --- 6. Dispersión temperatura vs humedad del aire ----------------------------------------
+// --- 6. Dispersión temperatura vs humedad del aire ---
 const dataDispersion = computed<ChartData<'scatter'>>(() => ({
   datasets: [{
     label: 'Temperatura vs humedad del aire',
@@ -253,7 +252,7 @@ const correlacion = computed(() => {
   return { r, texto: `${fuerza} ${r < 0 ? 'negativa' : 'positiva'}` }
 })
 
-// --- 7. Tabla de actuadores ---------------------------------------------------------------
+// --- 7. Tabla de actuadores ---
 const filasActuadores = computed(() => {
   const e = estadisticas.value
   if (!e) return []

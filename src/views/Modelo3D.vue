@@ -19,35 +19,35 @@ const COLORES = {
   ESTRUCTURA: '#ffffff'
 }
 
-// --- Aspecto del modelo ----------------------------------------------------------------
-// Materiales cuyo color lo controla el estado del actuador (no se tocan al blanquear)
-const MATERIALES_ACTUADOR = ['Material_Caloventor', 'Material_Humidificador', 'Bomba_de_agua']
+// --- Actuadores que cambian de color según su estado ---
+type ClaveActuador = 'caloventor' | 'humidificador' | 'bomba'
+const ACTUADORES_COLOR: Record<ClaveActuador, string[]> = {
+  caloventor: ['materialcaloventor'],
+  humidificador: ['materialhumidificador'],
+  bomba: ['bombadeagua']
+}
+const CLAVES_ACTUADOR = Object.keys(ACTUADORES_COLOR) as ClaveActuador[]
 
-// Mallas o materiales que conservan su color original (se busca el texto dentro del nombre,
-// sin distinguir mayúsculas). Ventanales y persianas se tratan como actuadores.
-// Si alguna pieza de un actuador (tuberías, soportes...) se puso blanca, agrega aquí su nombre.
+// Materiales
+const materialesActuador: Record<ClaveActuador, THREE.MeshStandardMaterial[]> = {
+  caloventor: [], humidificador: [], bomba: []
+}
+
+// --- Aspecto del modelo ---
 const CONSERVAR_COLOR: string[] = ['ventanal', 'persiana']
-
-// true: también los vidrios (materiales translúcidos) pasan a blanco, conservando su transparencia
 const BLANQUEAR_TRANSPARENTES = true
-
-const COLOR_FONDO = 0x2f3237   // el blanco necesita un fondo oscuro para destacar
-
-// Three.js r155+ ya no multiplica las intensidades por π: valores de 1 y 0.6 se ven oscuros
+const COLOR_FONDO = 0x2f3237
 const INTENSIDAD = { dia: 2.0, noche: 0.4, ambiente: 1.2, relleno: 1.0 }
-// ---------------------------------------------------------------------------------------
+// --------------------------
 
-// --- Ajustes que dependen de cómo se exportó invernadero.glb ---------------------------
-// Eje en el que se "enrollan" las persianas. Si no se mueven o se aplastan hacia un lado
-// equivocado, prueba con 'z' o 'x'.
+// --- Ajustes de invernadero.glb ---
 const EJE_PERSIANAS: 'x' | 'y' | 'z' = 'y'
 const ESCALA_PERSIANA_RECOGIDA = 0.05
-// Ángulos (rad) de los ventanales. Si abren al revés, intercambia abierto/cerrado.
 const ANGULOS = {
   izquierdo: { abierto: 0, cerrado: -Math.PI / 4 },
   derecho: { abierto: Math.PI, cerrado: Math.PI * 1.25 }
 } as const
-// ---------------------------------------------------------------------------------------
+// --------------------------
 
 let scene!: THREE.Scene
 let camera!: THREE.PerspectiveCamera
@@ -56,10 +56,6 @@ let controls!: OrbitControls
 let luzDireccional: THREE.DirectionalLight | undefined
 let animationFrameId = 0
 let resizeObserver: ResizeObserver | undefined
-
-let materialCaloventor: THREE.MeshStandardMaterial | undefined
-let materialHumidificador: THREE.MeshStandardMaterial | undefined
-let materialBomba: THREE.MeshStandardMaterial | undefined
 
 const ventanasMeshes: THREE.Object3D[] = []
 const persianasMeshes: THREE.Object3D[] = []
@@ -77,14 +73,17 @@ const toggleFullscreen = () => {
   }
 }
 
-// --- Colores de actuadores ---------------------------------------------------------------
-const pintar = (mat: THREE.MeshStandardMaterial | undefined, activo: boolean) =>
-  mat?.color.set(activo ? COLORES.AZUL_ACTIVO : COLORES.GRIS_INACTIVO)
-
+// --- Colores de actuadores ---
 const actualizarColores = () => {
-  pintar(materialCaloventor, telemetria.caloventorActivo)
-  pintar(materialHumidificador, telemetria.humidificadorActivo)
-  pintar(materialBomba, telemetria.bombaActiva)
+  const activo: Record<ClaveActuador, boolean> = {
+    caloventor: telemetria.caloventorActivo,
+    humidificador: telemetria.humidificadorActivo,
+    bomba: telemetria.bombaActiva
+  }
+  for (const clave of CLAVES_ACTUADOR) {
+    const color = activo[clave] ? COLORES.AZUL_ACTIVO : COLORES.GRIS_INACTIVO
+    for (const mat of materialesActuador[clave]) mat.color.set(color)
+  }
 }
 
 watch(
@@ -92,41 +91,57 @@ watch(
   actualizarColores
 )
 
-// --- Materiales del modelo ---------------------------------------------------------------
+// --- Materiales del modelo ---
 interface Informe { malla: string; material: string; tratamiento: string }
 
+const normalizar = (s: string) =>
+  s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')
+
+/** Nombres normalizados de la malla y de todos sus nodos padre */
+const nombresJerarquia = (obj: THREE.Object3D): string[] => {
+  const nombres: string[] = []
+  for (let o: THREE.Object3D | null = obj; o; o = o.parent) nombres.push(normalizar(o.name))
+  return nombres
+}
+
+const detectarActuador = (mesh: THREE.Mesh, mat: THREE.Material): ClaveActuador | null => {
+  const nombres = [normalizar(mat.name), ...nombresJerarquia(mesh)]
+  for (const clave of CLAVES_ACTUADOR) {
+    if (ACTUADORES_COLOR[clave].some(k => nombres.some(n => n.includes(k)))) return clave
+  }
+  return null
+}
+
 /**
- * Decide el color de cada material. Los materiales que NO son de actuadores se clonan por malla,
- * así blanquear la estructura nunca afecta a una pieza que comparta material con la tierra o un actuador.
+ * Decide el color de cada material. Todos se clonan por malla
  */
 const prepararMaterial = (mat: THREE.Material, mesh: THREE.Mesh, informe: Informe[]): THREE.Material => {
   const nombreMalla = mesh.name.toLowerCase()
   const nombreMat = mat.name.toLowerCase()
 
-  const esActuadorEstado = MATERIALES_ACTUADOR.includes(mat.name)
+  const m = mat.clone()
+  const std = m as THREE.MeshStandardMaterial
+
+  const actuador = detectarActuador(mesh, mat)
   const esTierra = nombreMalla.includes('tierra') || nombreMat.includes('tierra')
   const conservar = CONSERVAR_COLOR.some(k => nombreMalla.includes(k) || nombreMat.includes(k))
 
-  let m = mat
   let tratamiento: string
 
-  if (esActuadorEstado) {
-    tratamiento = 'actuador (color según estado)'
+  if (actuador) {
+    materialesActuador[actuador].push(std)
+    tratamiento = `actuador: ${actuador} (color según estado)`
+  } else if (esTierra) {
+    std.color?.set(COLORES.TIERRA)
+    tratamiento = 'tierra'
+  } else if (conservar) {
+    tratamiento = 'conserva color original'
+  } else if (BLANQUEAR_TRANSPARENTES || m.opacity >= 1) {
+    std.color?.set(COLORES.ESTRUCTURA)
+    std.map = null
+    tratamiento = 'blanco'
   } else {
-    m = mat.clone()
-    const std = m as THREE.MeshStandardMaterial
-    if (esTierra) {
-      std.color?.set(COLORES.TIERRA)
-      tratamiento = 'tierra'
-    } else if (conservar) {
-      tratamiento = 'conserva color original'
-    } else if (BLANQUEAR_TRANSPARENTES || m.opacity >= 1) {
-      std.color?.set(COLORES.ESTRUCTURA)
-      std.map = null            // si traía textura, también se quita
-      tratamiento = 'blanco'
-    } else {
-      tratamiento = 'transparente (color original)'
-    }
+    tratamiento = 'transparente (color original)'
   }
 
   m.side = THREE.DoubleSide
@@ -140,7 +155,7 @@ const prepararMaterial = (mat: THREE.Material, mesh: THREE.Mesh, informe: Inform
   return m
 }
 
-// --- Carga del modelo --------------------------------------------------------------------
+// --- Carga del modelo ---
 const cargarModelo = () => {
   new GLTFLoader().load('/invernadero.glb', (gltf) => {
     const modelo = gltf.scene
@@ -161,19 +176,18 @@ const cargarModelo = () => {
         persianasMeshes.push(mesh)
         escalaBasePersianas.set(mesh.uuid, mesh.scale[EJE_PERSIANAS])
       }
-
-      const materiales = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-      for (const mat of materiales) {
-        const std = mat as THREE.MeshStandardMaterial
-        if (mat.name === 'Material_Caloventor') materialCaloventor = std
-        if (mat.name === 'Material_Humidificador') materialHumidificador = std
-        if (mat.name === 'Bomba_de_agua') materialBomba = std
-      }
     })
 
     console.info(`[3D] ventanales: ${ventanasMeshes.length}, persianas: ${persianasMeshes.length}, ` +
-      `caloventor: ${!!materialCaloventor}, humidificador: ${!!materialHumidificador}, bomba: ${!!materialBomba}`)
+      `materiales con color de estado -> caloventor: ${materialesActuador.caloventor.length}, ` +
+      `humidificador: ${materialesActuador.humidificador.length}, bomba: ${materialesActuador.bomba.length}`)
     console.table(informe)   // qué se hizo con cada pieza del modelo
+    for (const clave of CLAVES_ACTUADOR) {
+      if (materialesActuador[clave].length === 0) {
+        console.warn(`[3D] No se encontró ninguna pieza para "${clave}". Revisa la tabla de arriba y ` +
+          `ajusta ACTUADORES_COLOR con el nombre real de su malla o material.`)
+      }
+    }
 
     modelo.position.set(0, -1, 0)
     scene.add(modelo)
@@ -186,7 +200,7 @@ const cargarModelo = () => {
   })
 }
 
-// --- Escena ------------------------------------------------------------------------------
+// --- Escena ---
 const ajustarTamano = () => {
   const cont = contenedor3D.value
   if (!cont || !renderer) return
@@ -254,7 +268,7 @@ const iniciarEscena = () => {
   controls.enableDamping = true
   controls.dampingFactor = 0.05
 
-  // Luz principal (varía entre día y noche), luz de relleno desde el lado opuesto y luz ambiente
+  // Luz principal
   luzDireccional = new THREE.DirectionalLight(0xffffff, INTENSIDAD.dia)
   luzDireccional.position.set(5, 10, 5)
   const luzRelleno = new THREE.DirectionalLight(0xffffff, INTENSIDAD.relleno)
