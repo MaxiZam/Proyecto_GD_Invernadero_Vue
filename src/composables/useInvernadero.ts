@@ -9,7 +9,7 @@ export interface Telemetria {
   esDeDia: boolean
 }
 export interface Alerta {
-  id: number; tipo: string; componente: string; mensaje: string; severidad: string; timestamp: string
+  id: number; tipo: string; codigo?: string; componente: string; mensaje: string; severidad: string; timestamp: string
 }
 export interface MuestraViva {
   t: number; temperatura: number; humedadSuelo: number; humedadAire: number; luminosidad: number
@@ -21,12 +21,17 @@ const INICIAL: Telemetria = {
   ventanalesAbiertos: false, persianasEnrolladas: false, bombaActiva: false,
   esDeDia: true
 }
-const MAX_ALERTAS = 100
-const MAX_MUESTRAS = 200
+
+/** Máximo de notificaciones visibles de cada tipo de alerta (siempre las más recientes). */
+export const MAX_ALERTAS_POR_TIPO = 2
+const MAX_ALERTAS = 100           // tope de seguridad
+const MAX_MUESTRAS = 200          // ~10 min con una muestra cada 3 s
 const SIN_DATOS_MS = 10_000
 const WS_URL = import.meta.env.VITE_WS_URL ?? 'http://localhost:8080/ws-invernadero'
+
+// Estado compartido (una sola conexión para toda la aplicación)
 const telemetria = reactive<Telemetria>({ ...INICIAL })
-const alertas = ref<Alerta[]>([])
+const alertas = ref<Alerta[]>([])           // ordenadas de la más reciente a la más antigua
 const muestras = ref<MuestraViva[]>([])
 const conectado = ref(false)
 const ultimaMuestra = ref(0)
@@ -37,6 +42,22 @@ const sinDatos = computed(() => !conectado.value || ahora.value - ultimaMuestra.
 
 let client: Client | null = null
 let contador = 0
+
+/** Identifica el tipo de una alerta: su código, o tipo+componente+severidad si no lo trae. */
+const claveTipo = (a: Alerta) => a.codigo ?? `${a.tipo}|${a.componente}|${a.severidad}`
+
+/** Agrega la alerta al principio y descarta las más antiguas de su tipo que excedan el máximo. */
+function registrarAlerta(nueva: Alerta) {
+  const porTipo = new Map<string, number>()
+  alertas.value = [nueva, ...alertas.value]
+    .filter(a => {
+      const clave = claveTipo(a)
+      const n = (porTipo.get(clave) ?? 0) + 1
+      porTipo.set(clave, n)
+      return n <= MAX_ALERTAS_POR_TIPO
+    })
+    .slice(0, MAX_ALERTAS)
+}
 
 export function conectar() {
   if (client) return
@@ -59,8 +80,7 @@ export function conectar() {
         if (muestras.value.length > MAX_MUESTRAS) muestras.value.shift()
       })
       c.subscribe('/topic/alertas', m => {
-        alertas.value.unshift({ ...JSON.parse(m.body), id: ++contador })
-        if (alertas.value.length > MAX_ALERTAS) alertas.value.pop()
+        registrarAlerta({ ...JSON.parse(m.body), id: ++contador })
       })
     },
     onWebSocketClose: () => {
